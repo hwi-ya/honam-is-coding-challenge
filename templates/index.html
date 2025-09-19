@@ -1,0 +1,1163 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>문화제 추천</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet + Routing Machine (각각 분리해서 로드해야 함) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+
+  <!-- 우측스크롤바 없애기 -->
+  <style>
+    /* 스크롤바 공간을 항상 예약해 레이아웃 흔들림 방지 */
+    html { scrollbar-gutter: stable both-edges; }
+
+    /* 스크롤바는 보이지 않게 (스크롤 기능은 유지) */
+    html, body {
+      -ms-overflow-style: none;   /* IE/레거시 Edge */
+      scrollbar-width: none;      /* Firefox */
+    }
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar {
+      display: none;              /* Chrome/Safari/새 Edge */
+    }
+
+    /* 폴백: scrollbar-gutter 미지원 브라우저에서 폭 고정 */
+    @supports not (scrollbar-gutter: stable) {
+      html, body { overflow-y: scroll; }
+    }
+  </style>
+</head>
+
+<body class="font-sans">
+  <div class="min-h-screen bg-white pb-20">
+    <!-- Header (내 위치 버튼 제거됨) -->
+    <header class="bg-white border-b sticky top-0 z-40">
+      <div class="container mx-auto px-4 py-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-pink-600">문화제 추천</h1>
+            <p class="text-sm text-slate-500">한국의 아름다운 축제를 만나보세요</p>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 홈 탭 -->
+    <main id="tab-home" class="container mx-auto px-4 py-6 space-y-6">
+      <!-- Weather card -->
+      <div class="bg-gradient-to-r from-blue-50 to-pink-50 rounded-xl py-6 shadow-sm">
+        <div class="p-6">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-yellow-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="4"></circle>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+              </svg>
+              <div>
+                <p class="text-2xl font-bold"><span id="temp">--°C</span></p>
+                <p class="text-sm text-slate-500"><span id="desc">로딩중…</span></p>
+              </div>
+            </div>
+            <div class="text-right space-y-1">
+              <div class="flex items-center text-sm text-slate-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"></path>
+                  <path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"></path>
+                </svg>
+                <span id="humidity">--%</span>
+              </div>
+              <div class="flex items-center text-sm text-slate-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"></path>
+                  <path d="M9.6 4.6A2 2 0 1 1 11 8H2"></path>
+                  <path d="M12.6 19.4A2 2 0 1 0 14 16H2"></path>
+                </svg>
+                <span id="wind">--m/s</span>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs bg-pink-600 text-white">
+              야외 축제를 즐기기 좋은 날씨입니다
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 추천 문화지 -->
+      <section>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-semibold">추천 문화지</h2>
+          <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs bg-slate-100 text-slate-700">야외 포함</span>
+        </div>
+        <div id="place-list" class="space-y-4"></div>
+      </section>
+
+    </main>
+
+    <!-- 지도 탭 -->
+    <section id="tab-map" class="container mx-auto px-4 py-6 hidden">
+      <div id="map" class="w-full h-[70vh] rounded-xl border"></div>
+      
+      <!-- 길찾기 종료 버튼 -->
+      <div id="routeControls" class="mt-3 flex justify-center hidden">
+        <button id="cancelRouteBtn" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center space-x-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+          <span>길찾기 종료</span>
+        </button>
+      </div>
+      
+      <div id="routeInfo" class="mt-3 text-sm text-slate-600"></div>
+    </section>
+
+    <!-- 찜 탭 -->
+    <section id="tab-fav" class="container mx-auto px-4 py-6 hidden">
+      <h2 class="text-xl font-semibold mb-4">찜한 장소</h2>
+      <div id="fav-empty" class="py-16 text-center text-slate-500">
+        아직 좋아요한 장소가 없어요.
+      </div>
+      <div id="fav-list" class="space-y-4"></div>
+    </section>
+
+    <!-- 하단 네비 -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t z-50">
+      <div class="container mx-auto px-4">
+        <div class="grid grid-cols-4">
+          <!-- 홈버튼 -->
+          <button id="tabHomeBtn" class="nav-btn py-3 flex flex-col items-center space-y-1 text-pink-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path>
+              <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            </svg>
+            <span class="text-xs">홈</span>
+          </button>
+          <!-- 지도버튼 -->
+          <button id="tabMapBtn" class="nav-btn py-3 flex flex-col items-center space-y-1 text-slate-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"></path>
+              <path d="M15 5.764v15"></path>
+              <path d="M9 3.236v15"></path>
+            </svg>
+            <span class="text-xs">지도</span>
+          </button>
+          <!-- 찜버튼 -->
+          <button id="tabFavBtn" class="nav-btn py-3 flex flex-col items-center space-y-1 text-slate-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path>
+            </svg>
+            <span class="text-xs">찜</span>
+          </button>
+          <!-- 내정보버튼  -->
+          <button class="nav-btn py-3 flex flex-col items-center space-y-1 text-slate-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span class="text-xs">내정보</span>
+          </button>
+        </div>
+      </div>
+    </nav>
+  </div>
+
+  <!-- 상세보기 모달 -->
+  <div id="detail-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+      <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <!-- 모달 헤더 -->
+        <div class="flex justify-between items-center p-6 border-b">
+          <h2 id="modal-title" class="text-2xl font-bold text-gray-900"></h2>
+          <button id="close-modal" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        
+        <!-- 모달 내용 -->
+          <div class="p-6">
+            <!-- 이미지 슬라이더 섹션 -->
+            <div class="mb-6">
+              <!-- 슬라이더 컨테이너 -->
+              <div class="relative overflow-hidden rounded-lg bg-gray-100">
+                <div id="image-slider" class="flex transition-transform duration-500 ease-in-out" style="transform: translateX(0%);">
+                  <!-- 현재 이미지 슬라이드 -->
+                  <div class="w-full flex-shrink-0 relative">
+                    <img id="modal-current-image" class="w-full h-64 object-cover" src="" alt="현재 모습">
+                    <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+                      <div class="flex items-center justify-between">
+                        <span class="text-white font-medium">현재 모습</span>
+                        <span class="text-white/80 text-sm">1/2</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- 과거 이미지 슬라이드 -->
+                  <div class="w-full flex-shrink-0 relative">
+                    <img id="modal-historical-image" class="w-full h-64 object-cover" src="" alt="과거 모습">
+                    <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+                      <div class="flex items-center justify-between">
+                        <span class="text-white font-medium">과거 모습</span>
+                        <span class="text-white/80 text-sm">2/2</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 슬라이더 네비게이션 버튼 -->
+                <button id="prev-btn" class="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white/80 hover:bg-white text-gray-800 rounded-full p-2 shadow-lg transition-all duration-200">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                  </svg>
+                </button>
+                
+                <button id="next-btn" class="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white/80 hover:bg-white text-gray-800 rounded-full p-2 shadow-lg transition-all duration-200">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                  </svg>
+                </button>
+                
+                <!-- 슬라이더 인디케이터 -->
+                <div class="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-2">
+                  <button id="indicator-0" class="w-2 h-2 rounded-full bg-white transition-all duration-200"></button>
+                  <button id="indicator-1" class="w-2 h-2 rounded-full bg-white/50 transition-all duration-200"></button>
+                </div>
+              </div>
+              
+              <!-- 이미지 설명 -->
+              <div class="mt-4">
+                <p id="modal-image-desc" class="text-gray-600"></p>
+              </div>
+            </div>
+          
+          <!-- 기본 정보 -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <h3 class="text-lg font-semibold mb-2">기본 정보</h3>
+              <div class="space-y-2">
+                <div class="flex items-center">
+                  <svg class="w-5 h-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                  </svg>
+                  <span id="modal-place" class="text-gray-600"></span>
+                </div>
+                <div class="flex items-center">
+                  <svg class="w-5 h-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <span id="modal-hours" class="text-gray-600"></span>
+                </div>
+                <div class="flex items-center">
+                  <svg class="w-5 h-5 text-yellow-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                  </svg>
+                  <span id="modal-rating" class="text-gray-600"></span>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h3 class="text-lg font-semibold mb-2">카테고리</h3>
+              <span id="modal-category" class="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"></span>
+            </div>
+          </div>
+          
+          <!-- 상세 설명 -->
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-2">상세 정보</h3>
+            <p id="modal-detail" class="text-gray-700 leading-relaxed whitespace-pre-line"></p>
+          </div>
+          
+          <!-- 액션 버튼 -->
+          <div class="flex space-x-3">
+            <button id="modal-directions" class="flex-1 bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700 flex items-center justify-center">
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+              </svg>
+              길찾기
+            </button>
+            <button id="modal-like" class="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 flex items-center">
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+              </svg>
+              좋아요
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 날씨 -->
+  <script>
+    let currentTab = 'current'; // 'current' 또는 'historical'
+    function renderWeather(data){
+      document.getElementById("temp").textContent = data.temp + "°C";
+      document.getElementById("desc").textContent = data.desc;
+      document.getElementById("humidity").textContent = data.humidity + "%";
+      document.getElementById("wind").textContent = data.wind + "m/s";
+    }
+    function loadWeather(pos){
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      fetch(`/api/weather?lat=${lat}&lon=${lon}`)
+        .then(r=>r.json()).then(renderWeather)
+        .catch(()=>{document.getElementById("desc").textContent="날씨 불러오기 실패";});
+    }
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(loadWeather, ()=>{document.getElementById("desc").textContent="위치 권한 필요";});
+    }
+  </script>
+
+  <!-- 관광지 데이터 + 렌더 -->
+  <script>
+    const JEONJU = { lat: 35.824, lon: 127.148 };
+    const PLACES = [
+      { title:"전주한옥마을", category:"마을/거리", place:"완산구 기린대로 99",
+        lat:35.8151, lon:127.1510, hours:"상시 개방(상점은 업장별 상이)", rating:4.7,
+        desc:"700여 채 한옥이 모인 전주의 대표 관광지로 한복 체험, 먹거리, 전통문화 체험이 가능.",
+        detail:
+          "전주 한옥 700여 채가 밀집한 생활형 마을로, 전통 한옥 숙박과 한복·한지·다도 등 체험 프로그램을 쉽게 접할 수 있습니다. " +
+          "경기전과 전동성당, 오목대·이목대와 도보로 연결되어 하루 코스로 둘러보기 좋으며, 비빔밥·막걸리 골목 등 먹거리도 풍부합니다.\n" +
+          "야간 경관 조명이 켜지는 시간대의 골목 산책이 특히 인기입니다. 주민이 거주하는 공간이므로 소음·무단촬영·쓰레기 투기를 삼가고, " +
+          "한옥 담장과 사적 건축물에는 기대거나 오르지 않도록 에티켓을 지켜 주세요.",
+        img:"/image/한옥마을 현재.jpg",
+        historicalImg:"/image/한옥마을 과거.webp",
+        historicalDesc:"1970년대 전주한옥마을은 일반 주거지역으로, 현재와 같은 관광지 모습은 아니었습니다. 2000년대 들어 한옥보존사업과 관광개발이 시작되면서 오늘날의 모습을 갖추게 되었습니다." },
+      
+      { title:"경기전(사적 제339호)", category:"사적", place:"완산구 태조로 44",
+        lat:35.8149, lon:127.1486, hours:"09:00–18:00(계절 변동)", rating:4.6,
+        desc:"태조 이성계 어진을 봉안한 전주 대표 유적. 전주사고본 조선왕조실록과 전통 정원으로 유명.",
+        detail:
+          "경기전은 1410년(태종 10)에 창건되어 태조 이성계의 어진을 봉안한 곳입니다. " +
+          "조선왕조실록 보관처였던 전주사고와 연결되는 역사적 의미가 크며, " +
+          "사계절마다 정원의 분위기가 달라 산책과 사진 촬영 장소로도 사랑받습니다.\n" +
+          "경내에는 어진박물관이 있어 왕실 문화와 의궤를 함께 관람할 수 있습니다.",
+        img:"/image/경기전 현재.jpg",
+        historicalImg:"/image/경기전 과거.jpg",
+        historicalDesc:"경기전은 조선시대부터 현재까지 큰 변화 없이 보존되어 왔습니다. 1900년대 초 일제강점기에 일부 훼손되었으나, 1970년대 복원사업을 통해 원래 모습을 되찾았습니다." },
+      
+      { title:"전동성당", category:"등록문화재", place:"완산구 태조로 51",
+        lat:35.8159, lon:127.1499, hours:"09:00–18:00(미사 시간 일부 통제)", rating:4.6,
+        desc:"로마네스크·비잔틴 양식이 어우러진 근대 성당. 한옥마을과 맞닿아 사진 명소로 유명.",
+        detail:
+          "전동성당은 1914년에 완공된 근대 가톨릭 성당으로, 둥근 아치와 돔이 특징적인 로마네스크·비잔틴 양식을 따릅니다.\n" +
+          "동학농민혁명 관련 순교지의 의미도 함께 지니며, 내부 스테인드글라스와 붉은 벽돌 외관이 아름답습니다.\n" +
+          "바로 옆 한옥마을과 연계해 도보로 관광하기 좋습니다.",
+        img:"/image/전동성당 현재.jpg",
+        historicalImg:"/image/전동성당 과거.jpg",
+        historicalDesc:"전동성당은 1908년 착공하여 1914년 완공된 모습이 현재까지 거의 그대로 보존되어 있습니다. 한국전쟁 당시에도 큰 피해 없이 보존되어 전주의 대표적인 근대건축물로 자리잡았습니다." },
+      
+      { title:"오목대·이목대", category:"전망/역사", place:"완산구 기린대로 55",
+        lat:35.8176, lon:127.1532, hours:"상시 개방", rating:4.5,
+        desc:"태조 이성계의 승전 고유지로 알려진 누정과 산책로. 한옥마을 전경이 내려다보이는 포토 스팟.",
+        detail:
+          "태조 이성계가 왜구 격퇴 승전을 기념하여 연회를 베췄다고 전해지는 누정으로, 한옥마을 지붕을 내려다보는 전망 명소입니다. " +
+          "오목대와 이목대는 짧은 산책로로 이어져 있어 가벼운 트레킹에 적합하며, 정상부 정자에 앉아 전주 시가지와 모악산 능선을 한눈에 감상할 수 있습니다.\n" +
+          "해 질 무렵과 야간 조명 시간대의 뷰가 특히 아름답습니다. 경사와 계단이 많아 미끄럼에 유의하고, 난간 밖 출입·드론 비행 등은 제한될 수 있습니다.",
+        img:"/image/오목대 현재.jpg",
+        historicalImg:"/image/오목대 과거.jpg",
+        historicalDesc:"오목대와 이목대는 조선시대부터 전해져 내려오는 유서 깊은 장소입니다. 1980년대까지는 단순한 언덕이었으나, 관광지 개발과 함께 현재의 정자와 산책로가 조성되었습니다." },
+      
+      { title:"자만벽화마을", category:"마을/거리", place:"완산구 기린대로 95-13 일대",
+        lat:35.8183, lon:127.1547, hours:"상시 개방(주민 거주지, 에티켓 필요)", rating:4.4,
+        desc:"골목마다 다양한 벽화와 카페가 모인 산책 코스. 오목대·한옥마을과 연계 방문하기 좋음.",
+        detail:
+          "승암산 자락 골목마다 벽화와 소품이 전시된 마을로, 카페와 소규모 갤러리가 모여 있어 사진 찍기 좋은 코스입니다. " +
+          "오목대·이목대와 한옥마을 사이에 있어 함께 둘러보기 편하며, 골목 곳곳에서 한옥 지붕과 시가지가 어우러진 전망을 만날 수 있습니다.\n" +
+          "주민이 거주하는 생활 공간이므로 소음·사유지 무단 진입을 삼가고, 벽화·문패·창문을 손대지 않는 등 촬영 에티켓을 지켜 주세요. " +
+          "좁은 경사길과 계단이 있어 편한 신발을 권장합니다.",
+        img:"/image/자만벽화마을 현재.jpg",
+        historicalImg:"/image/자만벽화마을 현재.jpg",
+        historicalDesc:"자만벽화마을은 2000년대 초까지 일반적인 달동네였습니다. 2010년대 들어 도시재생사업의 일환으로 벽화가 그려지기 시작했고, 현재는 전주의 대표적인 문화예술마을로 변모했습니다." }
+    ];
+
+    function distanceKm(a,b){
+      const R=6371, toRad=d=>d*Math.PI/180;
+      const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
+      const lat1=toRad(a.lat), lat2=toRad(b.lat);
+      const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+      return +(2*R*Math.asin(Math.sqrt(h))).toFixed(1);
+    }
+    function badge(cat){
+      const map = {"사적":"bg-amber-600","등록문화재":"bg-slate-700","마을/거리":"bg-pink-600","전망/역사":"bg-emerald-600"};
+      const cls = map[cat] || "bg-slate-600";
+      return `<span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs text-white ${cls}">${cat}</span>`;
+    }
+    function cardHTML(p, my){
+      const dist = my ? `${distanceKm(my,p)}km` : `${distanceKm(JEONJU,p)}km`;
+      return `
+      <div class="rounded-xl border py-6 shadow-sm overflow-hidden hover:shadow-lg transition-shadow">
+        <div class="relative">
+          <img src="${p.img}" alt="${p.title}" class="w-full h-48 object-cover" />
+          <div class="absolute top-4 left-4">${badge(p.category)}</div>
+          <div class="absolute top-4 right-4">
+            <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs bg-white/90 text-slate-900">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor">
+                <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"></path>
+              </svg>
+              ${p.rating}
+            </span>
+          </div>
+        </div>
+
+        <div class="grid gap-1.5 px-6 pb-3">
+          <div class="font-semibold text-lg">${p.title}</div>
+          <div class="flex items-center text-sm text-slate-500 space-x-4">
+            <div class="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+              </svg>
+              ${p.place}
+            </div>
+            <div class="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+              </svg>
+              ${dist}
+            </div>
+          </div>
+        </div>
+
+        <div class="px-6 pt-0">
+          <p class="text-sm text-slate-600 mb-4">${p.desc}</p>
+          <div class="flex items-center justify-between text-sm mb-4">
+            <div class="flex items-center text-slate-500">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 2v4M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path>
+              </svg>
+              ${p.hours}
+            </div>
+          </div>
+          <div class="flex items-center space-x-2">
+            <!-- 길찾기: 남는 폭 전부 차지 -->
+            <button type="button"
+              class="directions-btn flex-1 inline-flex items-center justify-center h-9 px-4 rounded-md bg-pink-600 text-white hover:bg-pink-700"
+              data-lat="${p.lat}" data-lon="${p.lon}" data-title="${p.title}">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+              </svg>
+              길찾기
+            </button>
+
+            <!-- 상세보기: 기존 폭(고정) -->
+            <button type="button"
+              class="detail-btn shrink-0 inline-flex items-center justify-center h-9 px-3 rounded-md border bg-white text-slate-700 hover:bg-slate-50"
+              data-id="${PLACES.indexOf(p)}">
+              상세보기
+            </button>
+
+            <!-- 좋아요: 정사각형 고정 -->
+            <button type="button"
+              class="like-btn shrink-0 w-9 h-9 rounded-md border bg-white text-slate-500 hover:bg-pink-50 flex items-center justify-center"
+              data-id="${PLACES.indexOf(p)}" aria-pressed="false" title="좋아요">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>`;
+    }
+    function renderPlaces(my){
+      const list = document.getElementById("place-list");
+      const base = my || JEONJU;
+      const sorted = [...PLACES].sort((a,b)=>distanceKm(base,a)-distanceKm(base,b));
+      list.innerHTML = sorted.map(p => cardHTML(p, my)).join("");
+    }
+    renderPlaces(null);
+    if (navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(
+        pos => renderPlaces({lat: pos.coords.latitude, lon: pos.coords.longitude}),
+        ()  => renderPlaces(null),
+        { enableHighAccuracy:true, timeout:8000 }
+      );
+    }
+  </script>
+
+  <!-- 탭 전환 + 지도/길찾기 -->
+  <script>
+    // 탭 전환
+    const tabHome = document.getElementById('tab-home');
+    const tabMap  = document.getElementById('tab-map');
+    function showTab(which){
+      if (which === 'map'){
+        tabHome.classList.add('hidden');
+        tabMap.classList.remove('hidden');
+        setTimeout(()=> map && map.invalidateSize(), 0);
+      } else {
+        tabMap.classList.add('hidden');
+        tabHome.classList.remove('hidden');
+      }
+    }
+    document.getElementById('tabHomeBtn').addEventListener('click', e=>{ e.preventDefault(); showTab('home'); });
+    document.getElementById('tabMapBtn').addEventListener('click',  e=>{ e.preventDefault(); showTab('map'); ensureMap(); renderLikedMarkers(); focusMyLocation(); setTimeout(fitMapToAll, 200);});
+
+    // 지도/라우팅 (전역 map 재사용)
+    let map, routingControl, myMarker, destMarker, likedLayer;
+    function ensureMap(){
+      if (!map) {
+        map = L.map('map').setView([35.824, 127.148], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'&copy; OpenStreetMap' }).addTo(map);
+      }
+      if (!likedLayer) likedLayer = L.layerGroup().addTo(map);
+    }
+    // 찜한 장소들 마커 렌더
+    function renderLikedMarkers(){
+      if (!map) return;
+      ensureMap();
+      likedLayer.clearLayers();
+
+      // liked는 localStorage에서 읽어온 Set (이미 쓰고 있던 것)
+      [...liked].forEach(id=>{
+        const p = PLACES[id];
+        if (!p) return;
+        const m = L.marker([p.lat, p.lon]).bindPopup(
+          `<b>${p.title}</b><br>${p.place}
+          <div class="mt-2">
+            <button class="route-from-popup px-2 py-1 rounded-md bg-pink-600 text-white"
+                    data-lat="${p.lat}" data-lon="${p.lon}" data-title="${p.title}">여기로 길찾기</button>
+          </div>`
+        );
+        likedLayer.addLayer(m);
+      });
+    }
+    // 내 위치 + 찜 마커 모두가 보이도록 맞춤
+    function fitMapToAll(){
+      if (!map) return;
+      if (routingControl) return; // 경로 표시 중이면 뷰 유지
+      const layers = [];
+      if (myMarker) layers.push(myMarker);
+      likedLayer && likedLayer.eachLayer(l => layers.push(l));
+      if (!layers.length) return;
+      const fg = L.featureGroup(layers);
+      map.fitBounds(fg.getBounds().pad(0.2));
+    }
+    function focusMyLocation(){
+      if (!navigator.geolocation) return;
+      ensureMap();
+      navigator.geolocation.getCurrentPosition(pos=>{
+        const here = L.latLng(pos.coords.latitude, pos.coords.longitude);
+        if (myMarker) myMarker.setLatLng(here);
+        else myMarker = L.marker(here).addTo(map).bindPopup('내 위치');
+        if (!routingControl) fitMapToAll();   // 경로 없을 때만 전체 보기
+      });
+    }
+    function routeTo(destLat, destLon, title='목적지'){
+      if (!navigator.geolocation){ alert('이 브라우저는 위치를 지원하지 않습니다.'); return; }
+      showTab('map'); ensureMap();
+      navigator.geolocation.getCurrentPosition(pos=>{
+        const from = L.latLng(pos.coords.latitude, pos.coords.longitude);
+        const to   = L.latLng(destLat, destLon);
+
+        if (myMarker) myMarker.setLatLng(from); else myMarker = L.marker(from).addTo(map).bindPopup('내 위치');
+        if (destMarker) { destMarker.setLatLng(to).setPopupContent(title); } else destMarker = L.marker(to).addTo(map).bindPopup(title);
+
+        if (routingControl) map.removeControl(routingControl);
+        routingControl = L.Routing.control({
+          waypoints: [from, to],
+          show: false, fitSelectedRoutes: true, addWaypoints: false,
+          lineOptions: { styles: [{ weight: 6, opacity: 0.9 }] },
+          router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' })
+        }).on('routesfound', e=>{
+          const s=e.routes[0].summary;
+          const km=(s.totalDistance/1000).toFixed(1), min=Math.round(s.totalTime/60);
+          const info=document.getElementById('routeInfo');
+          if (info) info.textContent=`경로: 약 ${km}km, ${min}분 소요`;
+          
+          // 길찾기 시작 시 종료 버튼 표시
+          showRouteControls();
+        }).addTo(map);
+      }, ()=> alert('현재 위치를 가져오지 못했습니다. 위치 권한을 허용해주세요.'), { enableHighAccuracy:true, timeout:10000 });
+    }
+
+    // 길찾기 종료 기능
+    function cancelRoute() {
+      if (routingControl) {
+        map.removeControl(routingControl);
+        routingControl = null;
+      }
+      
+      // 목적지 마커 제거
+      if (destMarker) {
+        map.removeLayer(destMarker);
+        destMarker = null;
+      }
+      
+      // 경로 정보 초기화
+      const info = document.getElementById('routeInfo');
+      if (info) info.textContent = '';
+      
+      // 종료 버튼 숨김
+      hideRouteControls();
+      
+      // 전체 지도 보기로 복원
+      fitMapToAll();
+      
+      console.log('길찾기가 종료되었습니다.');
+    }
+
+    // 길찾기 컨트롤 버튼 표시/숨김
+    function showRouteControls() {
+      const controls = document.getElementById('routeControls');
+      if (controls) controls.classList.remove('hidden');
+    }
+
+    function hideRouteControls() {
+      const controls = document.getElementById('routeControls');
+      if (controls) controls.classList.add('hidden');
+    }
+
+    // 길찾기 종료 버튼 이벤트 리스너
+    document.addEventListener('DOMContentLoaded', function() {
+      const cancelBtn = document.getElementById('cancelRouteBtn');
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          cancelRoute();
+        });
+      }
+    });
+
+    // 동적 카드의 '길찾기' 클릭
+    document.addEventListener('click', e=>{
+      const btn = e.target.closest('.directions-btn');
+      if (!btn) return;
+      e.preventDefault();
+      const lat = parseFloat(btn.dataset.lat);
+      const lon = parseFloat(btn.dataset.lon);
+      const title = btn.dataset.title || '목적지';
+      ensureMap();
+      routeTo(lat, lon, title);
+    });
+  </script>
+
+  <script>
+    // (NEW) 하단 네비 색상 토글 유틸
+    const homeBtn = document.getElementById('tabHomeBtn');
+    const mapBtn  = document.getElementById('tabMapBtn');
+
+    function setActiveNav(which){
+      const active   = el => { el.classList.add('text-pink-600');  el.classList.remove('text-slate-500'); };
+      const inactive = el => { el.classList.add('text-slate-500'); el.classList.remove('text-pink-600');  };
+      if (which === 'map'){ inactive(homeBtn); active(mapBtn); }
+      else                { active(homeBtn);  inactive(mapBtn); }
+    }
+
+    // (REPLACE) 기존 showTab 교체
+    function showTab(which){
+      if (which === 'map'){
+        tabHome.classList.add('hidden');
+        tabMap.classList.remove('hidden');
+        setActiveNav('map');                          // ← 색상 변경
+        setTimeout(()=> map && map.invalidateSize(), 0);
+      } else {
+        tabMap.classList.add('hidden');
+        tabHome.classList.remove('hidden');
+        setActiveNav('home');                         // ← 색상 변경
+      }
+    }
+
+    // 초기 상태: 홈 활성화
+    setActiveNav('home');
+
+    document.getElementById('tabHomeBtn').addEventListener('click', e=>{ e.preventDefault(); showTab('home'); });
+    document.getElementById('tabMapBtn').addEventListener('click',  e=>{ e.preventDefault(); showTab('map'); ensureMap(); focusMyLocation(); });
+  </script>
+
+
+  <!-- 상세보기 모달 -->
+  <div id="detailModal" class="fixed inset-0 bg-black/40 hidden z-50">
+    <div class="absolute inset-x-0 bottom-0 md:inset-0 md:my-10 md:mx-auto md:max-w-2xl">
+      <div class="bg-white rounded-t-2xl md:rounded-2xl shadow-lg overflow-hidden">
+        <div class="flex justify-between items-center px-4 py-3 border-b">
+          <h3 id="detailTitle" class="font-semibold text-lg"></h3>
+          <button id="detailClose" class="text-slate-500 hover:text-slate-800">닫기</button>
+        </div>
+
+        <img id="detailImg" class="w-full h-56 object-cover" alt="">
+
+        <div class="p-4 space-y-3 text-sm">
+          <div class="flex items-center text-slate-600">
+            <!-- map-pin -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            <span id="detailPlace"></span>
+          </div>
+
+          <div class="flex items-center text-slate-600">
+            <!-- calendar -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M8 2v4M16 2v4"></path>
+              <rect width="18" height="18" x="3" y="4" rx="2"></rect>
+              <path d="M3 10h18"></path>
+            </svg>
+            <span id="detailHours"></span>
+          </div>
+
+          <p id="detailDesc" class="text-slate-700 leading-relaxed whitespace-pre-line"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <script>
+    // ===== 상세보기 모달 (기존 코드 - 사용하지 않음) =====
+    // const detailModal  = document.getElementById('detailModal');
+    // const detailTitle  = document.getElementById('detailTitle');
+    // const detailImg    = document.getElementById('detailImg');
+    // const detailPlace  = document.getElementById('detailPlace');
+    // const detailHours  = document.getElementById('detailHours');
+    // const detailDesc   = document.getElementById('detailDesc');
+    // const detailClose  = document.getElementById('detailClose');
+
+    function openDetailById(id){
+      const p = PLACES[id];
+      if (!p) return;
+      detailTitle.textContent = p.title;
+      detailImg.src = p.img; detailImg.alt = p.title;
+      detailPlace.textContent = p.place;
+      detailHours.textContent = p.hours;
+      detailDesc.textContent = (p.detail && p.detail.trim()) || p.desc || "";
+      detailModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden'; // 배경 스크롤 잠금(옵션)
+    }
+    function closeDetail(){
+      detailModal.classList.add('hidden');
+      document.body.style.overflow = '';       // 잠금 해제
+    }
+
+    // 오버레이 클릭, 닫기 버튼, ESC로 닫기
+    detailClose.addEventListener('click', closeDetail);
+    detailModal.addEventListener('click', e => { if (e.target === detailModal) closeDetail(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !detailModal.classList.contains('hidden')) closeDetail(); });
+
+    // 동적으로 생성된 카드의 "상세보기" 버튼 핸들링
+    document.addEventListener('click', e => {
+      const btn = e.target.closest('.detail-btn');
+      if (!btn) return;
+      const id = parseInt(btn.dataset.id, 10);
+      openDetailById(id);
+    });
+  </script>
+
+  <!-- 찜탭 스크립트 -->
+  <script>
+  /* =========================
+    탭 전환 (home / map / fav)
+    ========================= */
+  const tabFav  = document.getElementById('tab-fav');
+  const favBtn  = document.getElementById('tabFavBtn');
+
+  function setActiveNav(which){
+    const active   = el => { el.classList.add('text-pink-600');  el.classList.remove('text-slate-500'); };
+    const inactive = el => { el.classList.add('text-slate-500'); el.classList.remove('text-pink-600');  };
+    [homeBtn,mapBtn,favBtn].forEach(inactive);
+    if (which === 'map') active(mapBtn);
+    else if (which === 'fav') active(favBtn);
+    else active(homeBtn);
+  }
+
+  function showTab(which){
+    tabHome.classList.add('hidden');
+    tabMap.classList.add('hidden');
+    tabFav.classList.add('hidden');
+
+    if (which === 'map'){
+      tabMap.classList.remove('hidden');
+      setActiveNav('map');
+      setTimeout(()=> map && map.invalidateSize(), 0);
+    } else if (which === 'fav'){
+      tabFav.classList.remove('hidden');
+      setActiveNav('fav');
+      renderFavorites();              // ← 찜 탭 들어올 때 렌더
+    } else {
+      tabHome.classList.remove('hidden');
+      setActiveNav('home');
+    }
+  }
+
+  homeBtn.addEventListener('click', e=>{ e.preventDefault(); showTab('home'); });
+  mapBtn.addEventListener('click',  e=>{ e.preventDefault(); showTab('map'); ensureMap?.(); focusMyLocation?.(); });
+  favBtn.addEventListener('click',  e=>{ e.preventDefault(); showTab('fav'); });
+
+  setActiveNav('home'); // 초기 상태
+
+  /* =========================
+    좋아요(찜) 상태 관리
+    ========================= */
+  const LIKE_KEY = 'likedPlaces';
+  const loadLikes = () => {
+    try { return new Set(JSON.parse(localStorage.getItem(LIKE_KEY) || '[]')); }
+    catch { return new Set(); }
+  };
+  let liked = loadLikes();
+  const saveLikes = () => localStorage.setItem(LIKE_KEY, JSON.stringify([...liked]));
+
+  // 버튼 UI 토글
+  function setLikeUI(btn, on){
+    btn.classList.toggle('bg-pink-600', on);
+    btn.classList.toggle('text-white', on);
+    btn.classList.toggle('border', !on);
+    btn.classList.toggle('bg-white', !on);
+    btn.classList.toggle('text-slate-500', !on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+
+    const svg = btn.querySelector('svg');
+    if (svg){
+      // 핑크 버튼일 때 하트는 흰색으로 채움
+      svg.setAttribute('fill', on ? 'currentColor' : 'none');
+      svg.setAttribute('stroke', on ? 'transparent' : 'currentColor');
+    }
+  }
+
+  // 현재 DOM에 있는 모든 like-btn을 상태에 맞춰 반영
+  function hydrateLikes(scope=document){
+    scope.querySelectorAll('.like-btn').forEach(btn=>{
+      const id = parseInt(btn.dataset.id, 10);
+      setLikeUI(btn, liked.has(id));
+    });
+  }
+
+  /* =========================
+    카드 렌더 확장
+    ========================= */
+  if (typeof renderPlaces === 'function') {
+    const _renderPlaces = renderPlaces;
+    window.renderPlaces = function(my){
+      _renderPlaces(my);
+      hydrateLikes(document);   // ← 좋아요 상태 반영
+    }
+  }
+
+  /* =========================
+    찜 탭 렌더
+    ========================= */
+  function renderFavorites(){
+    const list  = document.getElementById('fav-list');
+    const empty = document.getElementById('fav-empty');
+    const ids = [...liked];
+
+    if (ids.length === 0){
+      list.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+
+    const cards = ids.map(id => cardHTML(PLACES[id], null)).join('');
+    list.innerHTML = cards;
+    hydrateLikes(list);
+  }
+
+  /* =========================
+    좋아요 클릭 위임
+    ========================= */
+  document.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.like-btn');
+    if (!btn) return;
+
+    // ★ 지도로 이동/경로 호출을 하던 줄을 제거했습니다.
+    // routeTo(...) 호출 없음
+
+    const id = parseInt(btn.dataset.id, 10);
+    const isOn = liked.has(id);
+    if (isOn) liked.delete(id); else liked.add(id);
+    saveLikes();
+
+    // 현재 화면(홈/지도/찜)에 있는 동일 id의 버튼들을 모두 업데이트
+    document.querySelectorAll(`.like-btn[data-id="${id}"]`).forEach(b => setLikeUI(b, !isOn));
+
+    // 찜 탭이 열려 있다면 리스트 갱신
+    if (!tabFav.classList.contains('hidden')) renderFavorites();
+
+    // 지도 탭이 열려 있을 때만 마커 반영 (탭 이동 없음)
+    if (!tabMap.classList.contains('hidden')) {
+      renderLikedMarkers();
+      fitMapToAll();
+    }
+  });
+
+  /* =========================
+    상세보기 모달 기능 (슬라이더 방식)
+    ========================= */
+  const detailModal = document.getElementById('detail-modal');
+  const modalTitle = document.getElementById('detail-title');
+  const modalCurrentImage = document.getElementById('modal-current-image');
+  const modalHistoricalImage = document.getElementById('modal-historical-image');
+  const modalImageDesc = document.getElementById('modal-image-desc');
+  const modalDescription = document.getElementById('detail-description');
+  const modalAddress = document.getElementById('detail-address');
+  const modalHours = document.getElementById('modal-hours'); // 수정: detail-hours -> modal-hours
+  const modalPhone = document.getElementById('detail-phone');
+  const modalPlace = document.getElementById('modal-place');
+  const modalRating = document.getElementById('modal-rating');
+  const modalCategory = document.getElementById('modal-category');
+  const modalDetail = document.getElementById('modal-detail');
+  const closeModal = document.getElementById('close-modal');
+  const prevBtn = document.getElementById('prev-btn');
+  const nextBtn = document.getElementById('next-btn');
+  const indicator0 = document.getElementById('indicator-0');
+  const indicator1 = document.getElementById('indicator-1');
+
+  let currentModalPlace = null;
+  let currentSlide = 0;
+  const totalSlides = 2;
+
+  // 모달 열기
+  function openDetailModal(placeIndex) {
+    const place = PLACES[placeIndex];
+    if (!place) {
+      console.error('Place not found for index:', placeIndex);
+      return;
+    }
+
+    console.log('Opening modal for place:', place);
+    currentModalPlace = place;
+    
+    // 모달 내용 설정
+    if (modalTitle) modalTitle.textContent = place.title;
+    if (modalCurrentImage) modalCurrentImage.src = place.img;
+    if (modalHistoricalImage) modalHistoricalImage.src = place.historicalImg;
+    if (modalDescription) modalDescription.textContent = place.desc;
+    if (modalAddress) modalAddress.textContent = place.place;
+    if (modalHours) modalHours.textContent = place.hours;
+    if (modalPhone) modalPhone.textContent = place.phone || '정보 없음';
+    
+    // 기본 정보 설정 - 강제로 텍스트 설정
+    const placeElement = document.getElementById('modal-place');
+    const ratingElement = document.getElementById('modal-rating');
+    const categoryElement = document.getElementById('modal-category');
+    const detailElement = document.getElementById('modal-detail');
+    
+    if (placeElement) {
+      placeElement.textContent = place.place;
+      placeElement.style.display = 'block';
+      console.log('Set modal place:', place.place);
+    }
+    if (ratingElement) {
+      ratingElement.textContent = `${place.rating || '4.5'}/5.0`;
+      ratingElement.style.display = 'block';
+      console.log('Set modal rating:', place.rating);
+    }
+    if (categoryElement) {
+      categoryElement.textContent = place.category || '문화재';
+      categoryElement.style.display = 'block';
+      console.log('Set modal category:', place.category);
+    }
+    if (detailElement) {
+      detailElement.textContent = place.detail || place.desc;
+      detailElement.style.display = 'block';
+      console.log('Set modal detail:', place.detail || place.desc);
+    }
+
+    // 슬라이더 초기화
+    currentSlide = 0;
+    updateSlider();
+    updateImageDescription();
+
+    // 모달 표시
+    if (detailModal) {
+      detailModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+  }
+
+  // 모달 닫기
+  function closeDetailModal() {
+    detailModal.classList.add('hidden');
+    document.body.style.overflow = '';
+    currentModalPlace = null;
+  }
+
+  // 슬라이더 업데이트
+  function updateSlider() {
+    const slider = document.getElementById('image-slider');
+    const translateX = -currentSlide * 100;
+    slider.style.transform = `translateX(${translateX}%)`;
+    
+    // 인디케이터 업데이트
+    if (currentSlide === 0) {
+      indicator0.classList.remove('bg-white/50');
+      indicator0.classList.add('bg-white');
+      indicator1.classList.remove('bg-white');
+      indicator1.classList.add('bg-white/50');
+    } else {
+      indicator0.classList.remove('bg-white');
+      indicator0.classList.add('bg-white/50');
+      indicator1.classList.remove('bg-white/50');
+      indicator1.classList.add('bg-white');
+    }
+  }
+
+  // 이미지 설명 업데이트
+  function updateImageDescription() {
+    if (!currentModalPlace) return;
+    
+    if (currentSlide === 0) {
+      modalImageDesc.textContent = currentModalPlace.desc || '현재의 모습입니다.';
+    } else {
+      modalImageDesc.textContent = currentModalPlace.historicalDesc || '과거의 모습입니다.';
+    }
+  }
+
+  // 다음 슬라이드
+  function nextSlide() {
+    currentSlide = (currentSlide + 1) % totalSlides;
+    updateSlider();
+    updateImageDescription();
+  }
+
+  // 이전 슬라이드
+  function prevSlide() {
+    currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
+    updateSlider();
+    updateImageDescription();
+  }
+
+  // 이벤트 리스너
+  closeModal.addEventListener('click', closeDetailModal);
+  prevBtn.addEventListener('click', prevSlide);
+  nextBtn.addEventListener('click', nextSlide);
+  indicator0.addEventListener('click', () => {
+    currentSlide = 0;
+    updateSlider();
+    updateImageDescription();
+  });
+  indicator1.addEventListener('click', () => {
+    currentSlide = 1;
+    updateSlider();
+    updateImageDescription();
+  });
+
+  
+  // 모달 배경 클릭 시 닫기
+  detailModal.addEventListener('click', (e) => {
+    if (e.target === detailModal) {
+      closeDetailModal();
+    }
+  });
+
+  // ESC 키로 모달 닫기
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !detailModal.classList.contains('hidden')) {
+      closeDetailModal();
+    }
+  });
+
+  // 터치 제스처 지원 (모바일)
+  let touchStartX = 0;
+  let touchEndX = 0;
+
+  const imageSlider = document.getElementById('image-slider');
+  
+  imageSlider.addEventListener('touchstart', (e) => {
+    touchStartX = e.changedTouches[0].screenX;
+  });
+
+  imageSlider.addEventListener('touchend', (e) => {
+    touchEndX = e.changedTouches[0].screenX;
+    handleSwipe();
+  });
+
+  function handleSwipe() {
+    const swipeThreshold = 50;
+    const diff = touchStartX - touchEndX;
+    
+    if (Math.abs(diff) > swipeThreshold) {
+      if (diff > 0) {
+        // 왼쪽으로 스와이프 - 다음 슬라이드
+        nextSlide();
+      } else {
+        // 오른쪽으로 스와이프 - 이전 슬라이드
+        prevSlide();
+      }
+    }
+  }
+
+  // 상세보기 버튼 클릭 이벤트
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('detail-btn') || e.target.closest('.detail-btn')) {
+      const btn = e.target.classList.contains('detail-btn') ? e.target : e.target.closest('.detail-btn');
+      const placeIndex = parseInt(btn.dataset.id, 10);
+      openDetailModal(placeIndex);
+    }
+  });
+
+  // 모달 길찾기 버튼 클릭 이벤트
+  document.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-directions' || e.target.closest('#modal-directions')) {
+      if (currentModalPlace) {
+        const lat = currentModalPlace.lat;
+        const lon = currentModalPlace.lon;
+        const title = currentModalPlace.title;
+        
+        // 모달 닫기
+        closeDetailModal();
+        
+        // 지도 탭으로 전환
+        showTab('map');
+        
+        // 홈화면과 동일한 길찾기 로직 사용
+        ensureMap();
+        routeTo(lat, lon, title);
+        
+        console.log('모달 길찾기 클릭:', title);
+      }
+    }
+  });
+
+  // 모달 좋아요 버튼 클릭 이벤트
+  document.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-like' || e.target.closest('#modal-like')) {
+      if (currentModalPlace) {
+        const placeIndex = PLACES.indexOf(currentModalPlace);
+        if (placeIndex === -1) return;
+        
+        // 홈화면과 동일한 좋아요 로직 사용
+        const isOn = liked.has(placeIndex);
+        if (isOn) liked.delete(placeIndex); 
+        else liked.add(placeIndex);
+        saveLikes();
+
+        // 모달의 좋아요 버튼 UI 업데이트
+        const likeBtn = document.getElementById('modal-like');
+        setLikeUI(likeBtn, !isOn);
+        
+        // 현재 화면(홈/지도/찜)에 있는 동일 id의 버튼들을 모두 업데이트
+        document.querySelectorAll(`.like-btn[data-id="${placeIndex}"]`).forEach(b => setLikeUI(b, !isOn));
+
+        // 찜 탭이 열려 있다면 리스트 갱신
+        if (!tabFav.classList.contains('hidden')) renderFavorites();
+
+        // 지도 탭이 열려 있을 때만 마커 반영 (탭 이동 없음)
+        if (!tabMap.classList.contains('hidden')) {
+          renderLikedMarkers();
+          fitMapToAll();
+        }
+        
+        console.log('모달 좋아요 클릭:', currentModalPlace.title, !isOn ? '추가' : '취소');
+      }
+    }
+  });
+
+  </script>
+
+</body>
+</html>
